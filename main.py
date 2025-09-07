@@ -32,7 +32,7 @@ def init_gemini():
         raise ValueError("請設定GEMINI_API_KEY環境變數")
     
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.0-flash-exp')
+    return genai.GenerativeModel('gemini-2.5-flash-lite')
 
 vocabulary_df = load_vocabulary()
 gemini_model = init_gemini()
