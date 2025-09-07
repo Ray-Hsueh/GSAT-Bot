@@ -81,7 +81,7 @@ def select_words(df: pd.DataFrame, count: int, level: Optional[int] = None) -> L
 def generate_question_prompt(words: List[str]) -> str:
     """生成題目的prompt"""
     words_str = '、'.join(words)
-    return f"""你是一個英文科測驗命題者，你的任務是為台灣的大學學測（GSAT）出題。要測試用戶是否學會這幾個單字：{words_str}，請你依照學測大考中心的宗旨和難度出題並提供答案和解析，每一個單字只需要出一題，並請確保只有四個選項而且正確選項ABCD是均勻分布的，選項必須符合台灣學測程度，而且不要把本次測驗其他題目要考的單字當作選項，每一題的每一個選項都應該獨一無二，請自己尋找具有誘答力的選項，但My ______, who is three years older than me, always helps me with my homework.(A)brother(B)sister(C)cousin(D)friend，這種題目就不行，因為有三個選項都選了都可以算對。
+    return f"""你是一個英文科測驗命題者，你的任務是為台灣的大學學測（GSAT）出題。要測試用戶是否學會這幾個單字：{words_str}，請你依照學測大考中心的宗旨和難度出題並提供答案和解析，每一個單字只需要出一題，並請確保每個題目只有四個選項，而且正確選項ABCD是均勻分布的，而不是每一題答案都是A，選項必須符合台灣學測程度，而且不要把本次測驗其他題目要考的單字當作選項，每一題的每一個選項都應該獨一無二，請自己尋找具有誘答力的選項，但My ______, who is three years older than me, always helps me with my homework.(A)brother(B)sister(C)cousin(D)friend，這種題目就不行，因為有三個選項都選了都可以算對。
 請以json格式回答並且只需要題號、題目、選項、答案、詳解欄位，其他一概不需要，詳解請用繁體中文表達。以下為你應該遵照的json格式，詳解部分不一定要按照這個格式。
  {{
     "題號": 6,
