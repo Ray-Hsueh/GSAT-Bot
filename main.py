@@ -228,6 +228,10 @@ class QuizView(discord.ui.View):
             if is_correct:
                 self.game_state.score += 1
             
+            is_last_question = self.game_state.current_question + 1 >= self.total
+            if is_last_question and self.game_state.user_id in user_games:
+                del user_games[self.game_state.user_id]
+            
             result_embed = create_result_embed(
                 self.question, answer_key, is_correct, 
                 self.question_num, self.total
@@ -244,7 +248,7 @@ class QuizView(discord.ui.View):
                     )
                     result_view.add_item(new_item)
             
-            if self.game_state.current_question + 1 < self.total:
+            if not is_last_question:
                 next_button = discord.ui.Button(
                     label="下一題",
                     style=discord.ButtonStyle.success
@@ -284,8 +288,9 @@ class QuizView(discord.ui.View):
                 next_button.callback = next_callback
                 result_view.add_item(next_button)
             else:
+                # 測驗完成，顯示完成按鈕
                 stop_button = discord.ui.Button(
-                    label="停止測驗",
+                    label="測驗完成",
                     style=discord.ButtonStyle.danger,
                     disabled=True
                 )
