@@ -373,9 +373,9 @@ async def on_ready():
     except Exception as e:
         print(f"同步斜線指令時發生錯誤: {e}")
 
-@bot.tree.command(name="start", description="開始學測英文測驗")
+@bot.tree.command(name="vocabulary", description="開始詞彙測驗")
 async def start_quiz(interaction: discord.Interaction, questions: int = 5, level: Optional[int] = None):
-    """開始學測英文測驗"""
+    """開始詞彙測驗"""
     if questions < 1 or questions > 20:
         await interaction.response.send_message("題數必須在1-20之間！", ephemeral=True)
         return
@@ -423,13 +423,13 @@ async def help_command(interaction: discord.Interaction):
     """顯示幫助資訊"""
     embed = discord.Embed(
         title="學測英文練習機器人",
-        description="幫助你練習學測英文單字",
+        description="幫助你練習學測英文",
         color=0x3498db
     )
     
     embed.add_field(
         name="指令",
-        value="""`/start [題數] [級別]` - 開始測驗
+        value="""`/vocabulary [題數] [級別]` - 開始測驗
 `/help` - 顯示此幫助""",
         inline=False
     )
