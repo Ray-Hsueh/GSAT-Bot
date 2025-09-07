@@ -1,6 +1,6 @@
 # 學測英文練習 Discord 機器人
 
-這是一個使用 Python 和 Discord.py 開發的學測英文單字練習機器人，整合了 Google Gemini 2.5 Flash Lite API 來生成題目。
+這是一個使用 Python 和 Discord.py 開發的學測英文練習機器人，整合了 Google Gemini 2.5 Flash Lite API 來生成題目。
 
 ## 功能特色
 
@@ -44,7 +44,7 @@ python main.py
 
 ### 指令列表
 
-- `/start [題數] [級別]` - 開始測驗
+- `/vocabulary [題數] [級別]` - 開始測驗
   - 題數：1-20題（預設5題）
   - 級別：1-6級（可選，不指定則隨機選擇）
 
@@ -53,10 +53,10 @@ python main.py
 ### 使用範例
 
 ```
-/start                    # 開始5題隨機級別測驗
-/start questions:10       # 開始10題隨機級別測驗
-/start questions:5 level:3 # 開始5題第3級測驗
-/start questions:20 level:6 # 開始20題第6級測驗
+/vocabulary                    # 開始5題隨機級別測驗
+/vocabulary questions:10       # 開始10題隨機級別測驗
+/vocabulary questions:5 level:3 # 開始5題第3級測驗
+/vocabulary questions:20 level:6 # 開始20題第6級測驗
 ```
 
 ## 檔案結構
@@ -90,32 +90,10 @@ GSAT-English-Practice-Bot/
 - 超時自動結束測驗
 - 防止機器人資源被長期佔用
 
-### 成績統計
-
-- 即時計算正確率
-- 提供等級評定（優秀/良好/及格/需要加強）
-- 詳細的錯誤解析
-
-## 技術架構
-
-### 主要技術棧
-
-- **Discord.py**: Discord API 客戶端
-- **Pandas**: 資料處理和CSV讀取
-- **Google Generative AI**: AI題目生成
-- **Asyncio**: 異步程式設計
-
-### 核心類別
-
-- `GameState`: 管理用戶遊戲狀態
-- `QuizView`: Discord UI 互動介面
-- 各種 Embed 創建函數
-
 ## 注意事項
 
-1. 確保機器人有足夠的權限在 Discord 伺服器中運行
-2. Gemini API 有使用限制，請注意 API 配額
-3. 建議在測試環境中先驗證功能正常
+1. Gemini API 有使用限制，請注意 API 配額
+2. 建議在測試環境中先驗證功能正常
 
 ## 授權
 
