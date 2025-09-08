@@ -583,7 +583,7 @@ def create_comprehensive_question_embed(q: Dict, index: int, total: int, text: s
         description=f"{safe_text}",
         color=0x9b59b6
     )
-    embed.set_footer(text=f"請選擇第 {index} 題的答案（對應 {marker}）")
+    embed.set_footer(text=f"請選擇第 {index} 題的答案")
     return embed
 
 
