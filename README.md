@@ -46,15 +46,15 @@ python main.py
 
 - `/vocabulary [題數] [級別]` - 開始測驗
   - 題數：1-20題（預設5題）
-  - 級別：1-6級（可選，不指定則隨機選擇）
+  - 級別：1-6級（可選；未指定時將從所有級別隨機挑選單字）
 
 - `/help` - 顯示幫助資訊
 
 ### 使用範例
 
 ```
-/vocabulary                    # 開始5題隨機級別測驗
-/vocabulary questions:10       # 開始10題隨機級別測驗
+/vocabulary                     # 開始5題，從所有級別挑選單字
+/vocabulary questions:10        # 開始10題，從所有級別挑選單字
 /vocabulary questions:5 level:3 # 開始5題第3級測驗
 /vocabulary questions:20 level:6 # 開始20題第6級測驗
 ```

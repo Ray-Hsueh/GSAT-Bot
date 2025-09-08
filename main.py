@@ -441,7 +441,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="參數說明",
         value="""題數：1-20題（預設5題）
-級別：1-6級（可選，不指定則隨機選擇）""",
+級別：1-6級（可選；未指定時將從所有級別隨機挑選單字）""",
         inline=False
     )
     
