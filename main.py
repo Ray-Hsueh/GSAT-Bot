@@ -684,7 +684,7 @@ class ComprehensiveView(discord.ui.View):
         await interaction.followup.send(embed=detail_embed)
 
 
-@bot.tree.command(name="comprehensive", description="開始綜合測驗，最後一次性公布答案")
+@bot.tree.command(name="comprehensive", description="開始綜合測驗")
 async def comprehensive_command(interaction: discord.Interaction):
     if interaction.user.id in user_games:
         await interaction.response.send_message("你已經有一個進行中的測驗！請先完成或等待超時。", ephemeral=True)
