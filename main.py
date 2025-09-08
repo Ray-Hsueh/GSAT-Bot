@@ -580,13 +580,10 @@ def create_comprehensive_question_embed(q: Dict, index: int, total: int, text: s
     marker = _escape_md(f"__{index}__")
     embed = discord.Embed(
         title=f"綜合測驗 - 第 {index}/{total} 題",
-        description=f"{safe_text}\n\n請選擇第 {index} 題的答案（對應 {marker}）",
+        description=f"{safe_text}",
         color=0x9b59b6
     )
-    options = q['選項']
-    for key, value in options.items():
-        embed.add_field(name=f"({key})", value=_escape_md(value), inline=False)
-    embed.set_footer(text="本測驗不即時公布答案，將於最後統一揭曉")
+    embed.set_footer(text=f"請選擇第 {index} 題的答案（對應 {marker}）")
     return embed
 
 
