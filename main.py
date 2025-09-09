@@ -1,4 +1,6 @@
 import os
+import socket
+import platform
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -69,6 +71,38 @@ subject：社會科別（歷史/地理/公民）""",
         embed.add_field(
             name="注意事項",
             value="• 英文詞彙每題 3 分鐘；英文綜合 5 分鐘\n• 社會科每題 3 分鐘\n• 使用按鈕選擇答案\n• 可隨時點擊「停止測驗」結束",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @bot.tree.command(name="about", description="關於這個機器人")
+    async def about_command(interaction: discord.Interaction):
+        latency_ms = int(round(bot.latency * 1000)) if bot.latency is not None else -1
+        host_info = f"{platform.system()} {platform.release()} • {socket.gethostname()}"
+        embed = discord.Embed(
+            title="關於 GSAT 學測練習機器人",
+            description="幫助同學練習各科題目，支援逐題按鈕作答與詳解顯示",
+            color=0x2ecc71
+        )
+        embed.add_field(
+            name="它在做什麼",
+            value="""使用 `/help` 可以查看指令列表""",
+            inline=False
+        )
+        embed.add_field(
+            name="怎麼做到的",
+            value="""透過 Google Gemini 2.5 Flash Lite 技術支援以產生題目、選項與詳解""",
+            inline=False
+        )
+        embed.add_field(
+            name="也歡迎試試我的其他機器人",
+            value="""- [捷運球](https://discord.com/oauth2/authorize?client_id=1221349350425493504&permissions=1126726688427072&integration_type=0&scope=bot)
+- [政客迷因](https://discord.com/oauth2/authorize?client_id=1400469248869924964)""",
+            inline=False
+        )
+        embed.add_field(
+            name="系統與延遲",
+            value=f"主機：{host_info}\n延遲：{latency_ms} ms",
             inline=False
         )
         await interaction.response.send_message(embed=embed)
