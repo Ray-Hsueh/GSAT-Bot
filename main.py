@@ -1,5 +1,6 @@
 import os
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -21,7 +22,14 @@ async def on_ready():
     print(f'{bot.user} 已上線！')
     try:
         synced = await bot.tree.sync()
-        print(f"已同步 {len(synced)} 個斜線指令")
+        top_level_cmds = bot.tree.get_commands()
+        invokable_total = 0
+        for cmd in top_level_cmds:
+            if isinstance(cmd, app_commands.Group):
+                invokable_total += len(cmd.commands)
+            else:
+                invokable_total += 1
+        print(f"已同步 {len(synced)} 個頂層指令/群組；可用指令總數（含子指令）= {invokable_total}")
     except Exception as e:
         print(f"同步斜線指令時發生錯誤: {e}")
 
