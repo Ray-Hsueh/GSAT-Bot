@@ -36,6 +36,37 @@ def register_subjects():
 
 if __name__ == "__main__":
     register_subjects()
+    
+    @bot.tree.command(name="help", description="顯示幫助資訊")
+    async def help_command(interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="GSAT 學測練習機器人",
+            description="",
+            color=0x3498db
+        )
+        embed.add_field(
+            name="英文",
+            value="""`/english vocabulary [題數] [級別]` - 英文詞彙測驗
+`/english comprehensive` - 英文綜合測驗（完測後公布詳解）""",
+            inline=False
+        )
+        embed.add_field(
+            name="其他科目",
+            value="目前正在開發社會科",
+            inline=False
+        )
+        embed.add_field(
+            name="參數說明（英文詞彙）",
+            value="""題數：1-20（預設5）
+級別：1-6（可省略，未指定則從所有級別挑選）""",
+            inline=False
+        )
+        embed.add_field(
+            name="注意事項",
+            value="• 詞彙每題 3 分鐘；綜合 5 分鐘\n• 使用按鈕選擇答案\n• 可隨時點擊「停止測驗」結束",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed)
     bot.run(os.getenv('DISCORD_TOKEN'))
 
 

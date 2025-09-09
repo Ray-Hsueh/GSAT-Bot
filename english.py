@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import pandas as pd
 import random
 import json
@@ -449,9 +450,12 @@ class ComprehensiveView(discord.ui.View):
         await interaction.followup.send(embed=detail_embed)
 
 
-def register(bot: commands.Bot):
-    @bot.tree.command(name="vocabulary", description="開始詞彙測驗")
-    async def start_quiz(interaction: discord.Interaction, questions: int = 5, level: Optional[int] = None):
+class English(app_commands.Group):
+    def __init__(self):
+        super().__init__(name="english", description="英文科")
+
+    @app_commands.command(name="vocabulary", description="開始詞彙測驗")
+    async def start_quiz(self, interaction: discord.Interaction, questions: int = 5, level: Optional[int] = None):
         if questions < 1 or questions > 20:
             await interaction.response.send_message("題數必須在1-20之間！", ephemeral=True)
             return
@@ -483,8 +487,8 @@ def register(bot: commands.Bot):
                 del user_games[interaction.user.id]
             await interaction.followup.send("互動已超時，請重新開始測驗。", ephemeral=True)
 
-    @bot.tree.command(name="comprehensive", description="開始綜合測驗")
-    async def comprehensive_command(interaction: discord.Interaction):
+    @app_commands.command(name="comprehensive", description="開始綜合測驗")
+    async def comprehensive_command(self, interaction: discord.Interaction):
         if interaction.user.id in user_games:
             await interaction.response.send_message("你已經有一個進行中的測驗！請先完成或等待超時。", ephemeral=True)
             return
@@ -506,31 +510,9 @@ def register(bot: commands.Bot):
         except Exception as e:
             await interaction.edit_original_response(content=f"生成綜合測驗時發生錯誤：{e}")
 
-    @bot.tree.command(name="help", description="顯示幫助資訊")
-    async def help_command(interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="學測英文練習機器人",
-            description="幫助你練習學測英文",
-            color=0x3498db
-        )
-        embed.add_field(
-            name="指令",
-            value="""`/vocabulary [題數] [級別]` - 開始詞彙測驗
-`/comprehensive` - 開始綜合測驗，最後統一公布解答
-`/help` - 顯示此幫助""",
-            inline=False
-        )
-        embed.add_field(
-            name="參數說明",
-            value="""題數：1-20題（預設5題）
-級別：1-6級（可選；未指定時將從所有級別隨機挑選單字）""",
-            inline=False
-        )
-        embed.add_field(
-            name="注意事項",
-            value="• 每題有時間限制（詞彙：3 分鐘；綜合：5 分鐘）\n• 使用按鈕選擇答案\n• 可隨時點擊「停止測驗」按鈕結束\n• 綜合測驗於全部作答後才統一公布解答與詳解",
-            inline=False
-        )
-        await interaction.response.send_message(embed=embed)
+
+
+def register(bot: commands.Bot):
+    bot.tree.add_command(English())
 
 
