@@ -102,7 +102,7 @@ subject：社會科別（歷史/地理/公民）""",
         )
         embed.add_field(
             name="系統與延遲",
-            value=f"主機：{host_info}\n位置： Helsinki, Finland\n延遲：{latency_ms} ms",
+            value=f"主機：{host_info}\n位置：Helsinki, Finland\n延遲：{latency_ms} ms",
             inline=False
         )
         await interaction.response.send_message(embed=embed)
