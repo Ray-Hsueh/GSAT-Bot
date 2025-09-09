@@ -42,7 +42,7 @@ python main.py
 
 ## 使用說明
 
-### 指令列表（英文）
+### 指令列表
 
 - `/english vocabulary [題數] [級別]` - 開始測驗
   - 題數：1-20題（預設5題）
@@ -53,17 +53,23 @@ python main.py
   - 作答期間逐題顯示選項但不公布正解
   - 全部作答完後一次性顯示：每題正誤、你的答案、正確答案、詳解
 
+- `/social choice [questions] [subject]` - 社會科單選題（逐題作答）
+  - questions：1-10（預設5）
+  - subject：歷史/地理/公民（可不選）
+
 - `/help` - 顯示幫助資訊
 
 ### 使用範例
 
 ```
-/vocabulary                     # 開始5題，從所有級別挑選單字
-/vocabulary questions:10        # 開始10題，從所有級別挑選單字
-/vocabulary questions:5 level:3 # 開始5題第3級測驗
-/vocabulary questions:20 level:6 # 開始20題第6級測驗
+/english vocabulary
+/english vocabulary questions:10
+/english vocabulary questions:5 level:3
+/english comprehensive
 
-/comprehensive                  # 開始綜合測驗（5空），最後統一公布解答
+/social choice
+/social choice questions:8 subject:歷史
+/social choice questions:5 subject:地理
 ```
 
 ## 檔案結構與模組

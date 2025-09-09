@@ -28,9 +28,9 @@ async def on_ready():
 
 def register_subjects():
     english.register(bot)
-    chinese.register(bot)
-    subject_math.register(bot)
-    science.register(bot)
+    #chinese.register(bot)
+    #subject_math.register(bot)
+    #science.register(bot)
     social.register(bot)
 
 
@@ -52,7 +52,7 @@ if __name__ == "__main__":
         )
         embed.add_field(
             name="其他科目",
-            value="目前正在開發社會科",
+            value="`/social choice [questions] [subject]` - 社會科單選題（逐題作答）\nsubject 可選：歷史/地理/公民（可省略）",
             inline=False
         )
         embed.add_field(
