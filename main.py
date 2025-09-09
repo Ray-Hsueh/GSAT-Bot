@@ -53,25 +53,22 @@ if __name__ == "__main__":
             color=0x3498db
         )
         embed.add_field(
-            name="英文",
-            value="""`/english vocabulary [題數] [級別]` - 英文詞彙測驗
-`/english comprehensive` - 英文綜合測驗（完測後公布詳解）""",
+            name="指令",
+            value="""`/english vocabulary [questions] [level]` - 英文詞彙測驗
+`/english comprehensive` - 英文綜合測驗
+`/social choice [questions] [subject]` - 社會科單選題""",
             inline=False
         )
         embed.add_field(
-            name="其他科目",
-            value="`/social choice [questions] [subject]` - 社會科單選題（逐題作答）\nsubject 可選：歷史/地理/公民（可省略）",
-            inline=False
-        )
-        embed.add_field(
-            name="參數說明（英文詞彙）",
-            value="""題數：1-20（預設5）
-級別：1-6（可省略，未指定則從所有級別挑選）""",
+            name="參數說明",
+            value="""questions：題數（英文 1-20；社會 1-10；預設 5）
+level：英文等級 1-6（可不選，未指定則從所有級別挑選）
+subject：社會科別（歷史/地理/公民）""",
             inline=False
         )
         embed.add_field(
             name="注意事項",
-            value="• 詞彙每題 3 分鐘；綜合 5 分鐘\n• 使用按鈕選擇答案\n• 可隨時點擊「停止測驗」結束",
+            value="• 英文詞彙每題 3 分鐘；英文綜合 5 分鐘\n• 社會科每題 3 分鐘\n• 使用按鈕選擇答案\n• 可隨時點擊「停止測驗」結束",
             inline=False
         )
         await interaction.response.send_message(embed=embed)

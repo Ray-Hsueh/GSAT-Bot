@@ -208,6 +208,9 @@ class SocialQuizView(discord.ui.View):
         stop_embed = discord.Embed(title="測驗已停止", description="測驗已被用戶停止。", color=0xe74c3c)
         await interaction.response.edit_message(embed=stop_embed, view=self)
 
+    async def on_timeout(self):
+        social_games.pop(self.state.user_id, None)
+
 
 class Social(app_commands.Group):
     def __init__(self):
