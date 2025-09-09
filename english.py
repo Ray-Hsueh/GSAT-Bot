@@ -1,0 +1,536 @@
+import discord
+from discord.ext import commands
+import pandas as pd
+import random
+import json
+from datetime import datetime, timedelta
+import google.generativeai as genai
+import os
+from dotenv import load_dotenv
+from typing import Dict, List, Optional
+
+
+def load_vocabulary() -> pd.DataFrame:
+    try:
+        df = pd.read_csv('學測6000字.csv')
+        df = df.dropna(subset=['單字', '級別'])
+        return df
+    except Exception as e:
+        print(f"載入單字資料時發生錯誤: {e}")
+        return pd.DataFrame()
+
+
+def init_gemini():
+    load_dotenv()
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        raise ValueError("請設定GEMINI_API_KEY環境變數")
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel('gemini-2.5-flash-lite')
+
+
+def _escape_md(text: str) -> str:
+    if not isinstance(text, str):
+        return text
+    return text.replace('_', '\\_')
+
+
+def _chunk_text(text: str, limit: int = 1024) -> List[str]:
+    if not isinstance(text, str):
+        return [str(text)]
+    if len(text) <= limit:
+        return [text]
+    chunks: List[str] = []
+    paragraphs = text.split('\n\n')
+    buffer = ''
+    for para in paragraphs:
+        candidate = para if not buffer else buffer + '\n\n' + para
+        if len(candidate) <= limit:
+            buffer = candidate
+        else:
+            if buffer:
+                chunks.append(buffer)
+                buffer = ''
+            lines = para.split('\n')
+            acc = ''
+            for line in lines:
+                cand2 = line if not acc else acc + '\n' + line
+                if len(cand2) <= limit:
+                    acc = cand2
+                else:
+                    if acc:
+                        chunks.append(acc)
+                        acc = ''
+                    line_text = line
+                    while len(line_text) > limit:
+                        chunks.append(line_text[:limit])
+                        line_text = line_text[limit:]
+                    acc = line_text
+            if acc:
+                chunks.append(acc)
+    if buffer:
+        chunks.append(buffer)
+    return chunks
+
+
+vocabulary_df = load_vocabulary()
+gemini_model = init_gemini()
+
+
+class GameState:
+    def __init__(self, user_id: int, total_questions: int, level: Optional[int] = None):
+        self.user_id = user_id
+        self.total_questions = total_questions
+        self.level = level
+        self.current_question = 0
+        self.selected_words: List[str] = []
+        self.questions: List[Dict] = []
+        self.score = 0
+        self.start_time = datetime.now()
+
+
+user_games: Dict[int, object] = {}
+
+
+def select_words(df: pd.DataFrame, count: int, level: Optional[int] = None) -> List[str]:
+    if df.empty:
+        return []
+    filtered_df = df[df['級別'] == level] if level else df
+    if filtered_df.empty:
+        return []
+    selected = filtered_df.sample(n=min(count, len(filtered_df)), random_state=None)
+    words: List[str] = []
+    for word in selected['單字']:
+        if '/' in word:
+            word = random.choice(word.split('/'))
+        words.append(word)
+    return words
+
+
+def generate_question_prompt(words: List[str]) -> str:
+    words_str = '、'.join(words)
+    return f"""你是一個英文科測驗命題者，你的任務是為台灣的大學學測（GSAT）出題。要測試用戶是否學會這幾個單字：{words_str}，請你依照學測大考中心的宗旨和難度出題並提供答案和解析，每一個單字只需要出一題，並請確保每個題目只有四個選項，而且正確答案的選項位置是隨機分布無規律。選項必須符合台灣學測程度，所有題目的所有選項列出來看都應該獨一無二，依照該題情境所選擇。正確選項必須是唯一完全符合文意的選項，錯誤選項必須符合詞性但是放入後會造成語意錯誤或不自然或與題幹衝突或不合理或不符合語境。
+請以json格式回答並且只需要題號、題目、選項、答案、詳解欄位，其他一概不需要，詳解請用繁體中文表達。以下為你應該遵照的json格式，詳解部分不一定要按照這個格式。
+ {{
+    "題號": 6,
+    "題目": "The company implemented a new employee ______ program to ensure fair career development opportunities for everyone.",
+    "選項": {{
+      "A": "qualification",
+      "B": "rotation",
+      "C": "surpass",
+      "D": "analysis"
+    }},
+    "答案": "B",
+    "詳解": "句意為「該公司實施了新的員工______計畫，以確保每個人都有公平的職涯發展機會。」空格處應填入名詞，指公司計畫的一種形式。選項(A) qualification (資格)、(C) surpass (超越，為動詞)、(D) analysis (分析) 均不符合語意。選項(B) rotation (輪調、輪職) 符合語意，表示員工輪調計畫，讓員工有機會在不同職位上發展。"
+  }} 
+
+以下為學測題目，讓你可以參考著出題，不要把這些例題列出輸出的json中。 
+If you put a ______ under a leaking faucet, you will be surprised at the amount of water collected in 24 hours.
+(A) border
+(B) timer
+(C) container
+(D) marker
+The local farmers' market is popular as it offers a variety of fresh seasonal ______ to people in the community.
+(A) produce
+(B) fashion
+(C) brand
+(D) trend
+As the years have passed by, many of my childhood memories are already ______; I can no longer recall clearly what happened back then.
+(A) blurring
+(B) trimming
+(C) draining
+(D) glaring
+Racist remarks are by nature ______ and hurtful, and should be avoided on all occasions.
+(A) excessive
+(B) furious
+(C) offensive
+(D) stubborn"""
+
+
+async def generate_questions(words: List[str]) -> List[Dict]:
+    prompt = generate_question_prompt(words)
+    try:
+        response = gemini_model.generate_content(prompt)
+        content = response.text.strip()
+        if content.startswith('```json'):
+            content = content[7:-3]
+        elif content.startswith('```'):
+            content = content[3:-3]
+        questions_data = json.loads(content)
+        if isinstance(questions_data, dict):
+            return [questions_data]
+        return questions_data
+    except json.JSONDecodeError as e:
+        print(f"JSON解析錯誤: {e}")
+        print(f"原始內容: {content[:200]}...")
+        return []
+    except Exception as e:
+        print(f"生成題目時發生錯誤: {e}")
+        return []
+
+
+def create_question_embed(question: Dict, question_num: int, total: int) -> discord.Embed:
+    question_text = question['題目'].replace('_', '\\_')
+    embed = discord.Embed(
+        title=f"學測英文詞彙練習 - 第 {question_num}/{total} 題",
+        description=question_text,
+        color=0x3498db
+    )
+    options = question['選項']
+    for key, value in options.items():
+        embed.add_field(name=f"({key})", value=value, inline=False)
+    embed.set_footer(text="請選擇你的答案")
+    return embed
+
+
+def create_result_embed(question: Dict, user_answer: str, is_correct: bool, question_num: int, total: int) -> discord.Embed:
+    color = 0x2ecc71 if is_correct else 0xe74c3c
+    status = "✅ 正確！" if is_correct else "❌ 錯誤"
+    question_text = question['題目'].replace('_', '\\_')
+    embed = discord.Embed(
+        title=f"第 {question_num}/{total} 題結果 - {status}",
+        description=question_text,
+        color=color
+    )
+    options = question['選項']
+    correct_answer = question['答案']
+    for key, value in options.items():
+        if key == correct_answer:
+            embed.add_field(name=f"✅ ({key}) (正確答案)", value=value, inline=False)
+        elif key == user_answer and not is_correct:
+            embed.add_field(name=f"❌ ({key}) (你的答案)", value=value, inline=False)
+        else:
+            embed.add_field(name=f"({key})", value=value, inline=False)
+    explanation_text = question['詳解'].replace('_', '\\_')
+    embed.add_field(name="詳解", value=explanation_text, inline=False)
+    return embed
+
+
+class QuizView(discord.ui.View):
+    def __init__(self, question: Dict, question_num: int, total: int, game_state: GameState):
+        super().__init__(timeout=180)
+        self.question = question
+        self.question_num = question_num
+        self.total = total
+        self.game_state = game_state
+        options = question['選項']
+        for key, value in options.items():
+            button = discord.ui.Button(label=f"({key}) {value}", style=discord.ButtonStyle.primary)
+            button.callback = self.create_answer_callback(key)
+            self.add_item(button)
+        stop_button = discord.ui.Button(label="停止測驗", style=discord.ButtonStyle.danger)
+        stop_button.callback = self.stop_quiz_callback
+        self.add_item(stop_button)
+
+    def create_answer_callback(self, answer_key: str):
+        async def answer_callback(interaction: discord.Interaction):
+            if interaction.user.id != self.game_state.user_id:
+                await interaction.response.send_message("這不是你的測驗！", ephemeral=True)
+                return
+            correct_answer = self.question['答案']
+            is_correct = answer_key == correct_answer
+            if is_correct:
+                self.game_state.score += 1
+            is_last_question = self.game_state.current_question + 1 >= self.total
+            if is_last_question and self.game_state.user_id in user_games:
+                del user_games[self.game_state.user_id]
+            result_embed = create_result_embed(self.question, answer_key, is_correct, self.question_num, self.total)
+            result_view = discord.ui.View(timeout=180)
+            for item in self.children:
+                if isinstance(item, discord.ui.Button) and item.label.startswith("("):
+                    new_item = discord.ui.Button(label=item.label, style=item.style, disabled=True)
+                    result_view.add_item(new_item)
+            if not is_last_question:
+                next_button = discord.ui.Button(label="下一題", style=discord.ButtonStyle.success)
+                async def next_callback(interaction: discord.Interaction):
+                    if interaction.user.id != self.game_state.user_id:
+                        await interaction.response.send_message("這不是你的測驗！", ephemeral=True)
+                        return
+                    for item in self.children:
+                        item.disabled = True
+                    await interaction.response.edit_message(view=self)
+                    self.game_state.current_question += 1
+                    if self.game_state.current_question < self.total:
+                        next_question = self.game_state.questions[self.game_state.current_question]
+                        next_embed = create_question_embed(next_question, self.game_state.current_question + 1, self.total)
+                        next_view = QuizView(next_question, self.game_state.current_question + 1, self.total, self.game_state)
+                        await interaction.followup.send(embed=next_embed, view=next_view)
+                    else:
+                        if self.game_state.user_id in user_games:
+                            del user_games[self.game_state.user_id]
+                next_button.callback = next_callback
+                result_view.add_item(next_button)
+            else:
+                stop_button = discord.ui.Button(label="測驗完成", style=discord.ButtonStyle.danger, disabled=True)
+                result_view.add_item(stop_button)
+            await interaction.response.edit_message(embed=result_embed, view=result_view)
+        return answer_callback
+
+    async def stop_quiz_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.game_state.user_id:
+            await interaction.response.send_message("這不是你的測驗！", ephemeral=True)
+            return
+        if self.game_state.user_id in user_games:
+            del user_games[self.game_state.user_id]
+        for item in self.children:
+            item.disabled = True
+        stop_embed = discord.Embed(title="測驗已停止", description="測驗已被用戶停止。", color=0xe74c3c)
+        await interaction.response.edit_message(embed=stop_embed, view=self)
+
+    async def on_timeout(self):
+        if self.game_state.user_id in user_games:
+            del user_games[self.game_state.user_id]
+
+
+def generate_comprehensive_prompt() -> str:
+    return (
+        "角色： 英文科測驗命題者，你的任務是為台灣大學學測（GSAT）設計風格多元的「綜合測驗」題組。\n"
+        "任務目標： 創建一篇符合高中生程度、包含5個空格的英文短文（cloze test），並模擬學測趨勢，綜合評量考生的詞彙、文法和語篇邏輯能力。\n"
+        "核心指令：主題多元化\n"
+        "為了確保出題面向的廣度，請從下方的主題庫中隨機選擇一個類別進行命題，並可利用網路查詢跟上時事。請勿總是選擇安全、溫暖的社會議題，應力求主題的多樣性。\n"
+        "主題庫:\n"
+        "科技新知: 介紹一項有趣的科技，並探討其潛在影響。\n"
+        "心理科普: 解釋一個常見的心理學現象或認知偏誤。\n"
+        "自然生態: 描述一種奇特的生物行為、生態系統，或是一項創新的環境保護方法。\n"
+        "人文歷史與藝術: 講述一個歷史事件的有趣側面、一項發明的起源，或某位藝術家的創作理念。\n"
+        "生活風格與社會趨勢: 探討一個現代社會趨勢。\n"
+        "自行上網搜尋最新時事: 結合現時最新的報導、事件等出做題目。\n\n"
+        "短文內容要求：\n"
+        "敘事風格： 採用知識性與趣味性兼具的描述或說明文風格。\n"
+        "敘事結構： 盡量包含一個簡單的邏輯鏈，如「背景介紹 -> 核心概念/挑戰 -> 影響/結果」。\n"
+        "長度： 不能多於兩百個單字。\n\n"
+        "命題重點（請確保題組中均衡包含以下測驗點）：\n"
+        "情境詞彙： 測驗在特定學科或情境下的精確用字。\n"
+        "文法結構與時態： 包含至少一題明顯的文法考點（如分詞構句、假設語氣或複雜子句）。\n"
+        "慣用語與動詞片語： 包含至少一題常見的動詞片語或固定搭配。\n"
+        "語篇轉折詞： 測驗句子間的邏輯關係。\n"
+        "選項誘答性： 錯誤選項應具備高度誘答力，避免無關或詞性錯誤的選項。\n\n"
+        "輸出格式要求：\n"
+        "請僅輸出JSON，且只包含以下欄位：\n"
+        "- 文本（以 __1__ 至 __5__ 標示空格）\n"
+        "- 空格（含五個題目，每題包含 題號、選項(含A/B/C/D)、答案、詳解[繁體中文]）\n"
+        "不要輸出任何多餘文字、說明或代碼框。\n\n"
+        "回傳JSON結構範例如下（僅作格式參考，不得抄寫內容）：\n"
+        "{\n"
+        "  \"文本\": \"...含 __1__ 到 __5__ 的短文...\",\n"
+        "  \"空格\": [\n"
+        "    { \"題號\": 1, \"選項\": {\"A\": \"...\", \"B\": \"...\", \"C\": \"...\", \"D\": \"...\"}, \"答案\": \"A\", \"詳解\": \"繁體中文解析\" },\n"
+        "    { \"題號\": 2, \"選項\": {\"A\": \"...\", \"B\": \"...\", \"C\": \"...\", \"D\": \"...\"}, \"答案\": \"B\", \"詳解\": \"繁體中文解析\" },\n"
+        "    { \"題號\": 3, \"選項\": {\"A\": \"...\", \"B\": \"...\", \"C\": \"...\", \"D\": \"...\"}, \"答案\": \"C\", \"詳解\": \"繁體中文解析\" },\n"
+        "    { \"題號\": 4, \"選項\": {\"A\": \"...\", \"B\": \"...\", \"C\": \"...\", \"D\": \"...\"}, \"答案\": \"D\", \"詳解\": \"繁體中文解析\" },\n"
+        "    { \"題號\": 5, \"選項\": {\"A\": \"...\", \"B\": \"...\", \"C\": \"...\", \"D\": \"...\"}, \"答案\": \"A\", \"詳解\": \"繁體中文解析\" }\n"
+        "  ]\n"
+        "}\n"
+    )
+
+
+def _generate_comprehensive_data() -> Optional[Dict]:
+    prompt = generate_comprehensive_prompt()
+    response = gemini_model.generate_content(prompt)
+    content = response.text.strip()
+    if content.startswith('```json'):
+        content = content[7:-3]
+    elif content.startswith('```'):
+        content = content[3:-3]
+    data = json.loads(content)
+    if not isinstance(data, dict):
+        return None
+    if '文本' not in data or '空格' not in data:
+        return None
+    if not isinstance(data['空格'], list) or len(data['空格']) != 5:
+        return None
+    return data
+
+
+class ComprehensiveState:
+    def __init__(self, user_id: int, data: Dict):
+        self.user_id = user_id
+        self.text = data['文本']
+        self.questions = data['空格']
+        self.total = len(self.questions)
+        self.current_index = 0
+        self.user_answers: List[str] = []
+        self.start_time = datetime.now()
+
+    def is_expired(self) -> bool:
+        return datetime.now() - self.start_time > timedelta(minutes=5)
+
+
+def create_comprehensive_question_embed(q: Dict, index: int, total: int, text: str) -> discord.Embed:
+    safe_text = _escape_md(text)
+    embed = discord.Embed(
+        title=f"綜合測驗 - 第 {index}/{total} 題",
+        description=f"{safe_text}",
+        color=0x9b59b6
+    )
+    embed.set_footer(text=f"請選擇第 {index} 題的答案")
+    return embed
+
+
+class ComprehensiveView(discord.ui.View):
+    def __init__(self, state: ComprehensiveState):
+        super().__init__(timeout=300)
+        self.state = state
+        options = self.state.questions[self.state.current_index]['選項']
+        for key, value in options.items():
+            button = discord.ui.Button(label=f"({key}) {value}", style=discord.ButtonStyle.primary)
+            button.callback = self.create_answer_callback(key)
+            self.add_item(button)
+        stop_button = discord.ui.Button(label="停止測驗", style=discord.ButtonStyle.danger)
+        stop_button.callback = self.stop_quiz_callback
+        self.add_item(stop_button)
+
+    def create_answer_callback(self, answer_key: str):
+        async def answer_callback(interaction: discord.Interaction):
+            if interaction.user.id != self.state.user_id:
+                await interaction.response.send_message("這不是你的測驗！", ephemeral=True)
+                return
+            self.state.user_answers.append(answer_key)
+            self.state.current_index += 1
+            is_last_done = self.state.current_index >= self.state.total
+            for item in self.children:
+                item.disabled = True
+            await interaction.response.edit_message(view=self)
+            if is_last_done:
+                if self.state.user_id in user_games:
+                    del user_games[self.state.user_id]
+                await self.show_summary(interaction)
+            else:
+                next_q = self.state.questions[self.state.current_index]
+                embed = create_comprehensive_question_embed(next_q, self.state.current_index + 1, self.state.total, self.state.text)
+                next_view = ComprehensiveView(self.state)
+                await interaction.followup.send(embed=embed, view=next_view)
+        return answer_callback
+
+    async def stop_quiz_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.state.user_id:
+            await interaction.response.send_message("這不是你的測驗！", ephemeral=True)
+            return
+        if self.state.user_id in user_games:
+            del user_games[self.state.user_id]
+        for item in self.children:
+            item.disabled = True
+        stop_embed = discord.Embed(title="測驗已停止", description="綜合測驗已被用戶停止。", color=0xe74c3c)
+        await interaction.response.edit_message(embed=stop_embed, view=self)
+
+    async def on_timeout(self):
+        if self.state.user_id in user_games:
+            del user_games[self.state.user_id]
+
+    async def show_summary(self, interaction: discord.Interaction):
+        detail_embed = discord.Embed(title="題目解答與詳解", color=0x3498db)
+        for idx, q in enumerate(self.state.questions):
+            options = q.get('選項', {})
+            correct_key = q.get('答案')
+            explanation = q.get('詳解', '')
+            user_ans = self.state.user_answers[idx] if idx < len(self.state.user_answers) else ""
+            is_correct = (str(user_ans).strip() == str(correct_key).strip())
+            result_line = "結果: ✅ 正確" if is_correct else "結果: ❌ 錯誤"
+            option_lines = [f"({key}) {_escape_md(value)}" for key, value in options.items()]
+            option_block = "\n".join(option_lines)
+            correct_value = _escape_md(options.get(correct_key, '')) if correct_key else ''
+            user_value = _escape_md(options.get(user_ans, '')) if user_ans else ''
+            expl_text = _escape_md(explanation) if explanation else '—'
+            explanation_full = (
+                f"{result_line}\n"
+                f"你的答案: {user_ans} {user_value}\n"
+                f"正確答案: {correct_key} {correct_value}\n\n"
+                f"詳解: {expl_text}"
+            )
+            opt_chunks = _chunk_text(option_block, 1024)
+            expl_chunks = _chunk_text(explanation_full, 1024)
+            head = f"第 {idx+1} 題"
+            for j, c in enumerate(opt_chunks):
+                n = head if j == 0 else f"{head}（續）"
+                detail_embed.add_field(name=n, value=c, inline=False)
+            for j, c in enumerate(expl_chunks):
+                n = f"{head} 詳解" if j == 0 else f"{head} 詳解（續）"
+                detail_embed.add_field(name=n, value=c, inline=False)
+        await interaction.followup.send(embed=detail_embed)
+
+
+def register(bot: commands.Bot):
+    @bot.tree.command(name="vocabulary", description="開始詞彙測驗")
+    async def start_quiz(interaction: discord.Interaction, questions: int = 5, level: Optional[int] = None):
+        if questions < 1 or questions > 20:
+            await interaction.response.send_message("題數必須在1-20之間！", ephemeral=True)
+            return
+        if level and (level < 1 or level > 6):
+            await interaction.response.send_message("級別必須在1-6之間！", ephemeral=True)
+            return
+        if interaction.user.id in user_games:
+            await interaction.response.send_message("你已經有一個進行中的測驗！請先完成或等待超時。", ephemeral=True)
+            return
+        game_state = GameState(interaction.user.id, questions, level)
+        user_games[interaction.user.id] = game_state
+        selected_words = select_words(vocabulary_df, questions, level)
+        game_state.selected_words = selected_words
+        if not interaction.response.is_done():
+            await interaction.response.send_message("正在生成詞彙測驗，請稍候...")
+        questions_data = await generate_questions(selected_words)
+        if not questions_data:
+            await interaction.followup.send("生成題目時發生錯誤，請稍後再試。", ephemeral=True)
+            del user_games[interaction.user.id]
+            return
+        game_state.questions = questions_data
+        first_question = questions_data[0]
+        embed = create_question_embed(first_question, 1, questions)
+        view = QuizView(first_question, 1, questions, game_state)
+        try:
+            await interaction.edit_original_response(content="", embed=embed, view=view)
+        except discord.errors.NotFound:
+            if interaction.user.id in user_games:
+                del user_games[interaction.user.id]
+            await interaction.followup.send("互動已超時，請重新開始測驗。", ephemeral=True)
+
+    @bot.tree.command(name="comprehensive", description="開始綜合測驗")
+    async def comprehensive_command(interaction: discord.Interaction):
+        if interaction.user.id in user_games:
+            await interaction.response.send_message("你已經有一個進行中的測驗！請先完成或等待超時。", ephemeral=True)
+            return
+        if not interaction.response.is_done():
+            await interaction.response.send_message("正在生成綜合測驗，請稍候...")
+        try:
+            data = _generate_comprehensive_data()
+            if not data:
+                await interaction.edit_original_response(content="生成題目時發生錯誤，請稍後再試。")
+                return
+            state = ComprehensiveState(interaction.user.id, data)
+            user_games[interaction.user.id] = state
+            first_q = state.questions[0]
+            embed = create_comprehensive_question_embed(first_q, 1, state.total, state.text)
+            view = ComprehensiveView(state)
+            await interaction.edit_original_response(content="", embed=embed, view=view)
+        except json.JSONDecodeError as e:
+            await interaction.edit_original_response(content=f"生成內容非合法JSON，請重試。錯誤：{e}")
+        except Exception as e:
+            await interaction.edit_original_response(content=f"生成綜合測驗時發生錯誤：{e}")
+
+    @bot.tree.command(name="help", description="顯示幫助資訊")
+    async def help_command(interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="學測英文練習機器人",
+            description="幫助你練習學測英文",
+            color=0x3498db
+        )
+        embed.add_field(
+            name="指令",
+            value="""`/vocabulary [題數] [級別]` - 開始詞彙測驗
+`/comprehensive` - 開始綜合測驗，最後統一公布解答
+`/help` - 顯示此幫助""",
+            inline=False
+        )
+        embed.add_field(
+            name="參數說明",
+            value="""題數：1-20題（預設5題）
+級別：1-6級（可選；未指定時將從所有級別隨機挑選單字）""",
+            inline=False
+        )
+        embed.add_field(
+            name="注意事項",
+            value="• 每題有時間限制（詞彙：3 分鐘；綜合：5 分鐘）\n• 使用按鈕選擇答案\n• 可隨時點擊「停止測驗」按鈕結束\n• 綜合測驗於全部作答後才統一公布解答與詳解",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed)
+
+
